@@ -1,5 +1,15 @@
 [
   {
+    "version": "1.5.16",
+    "date": "2026-03-03",
+    "en": [
+      "Fix channel config binding for non-default accounts"
+    ],
+    "zh": [
+      "修复多账号场景下频道配置绑定错误的问题"
+    ]
+  },
+  {
     "version": "1.5.15",
     "date": "2026-03-02",
     "en": [

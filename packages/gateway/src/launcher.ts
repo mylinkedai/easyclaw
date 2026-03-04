@@ -1,8 +1,15 @@
 import { spawn, execSync } from "node:child_process";
 import type { ChildProcess } from "node:child_process";
 import { EventEmitter } from "node:events";
-import { existsSync, readFileSync, mkdirSync, cpSync } from "node:fs";
+import {
+  existsSync,
+  readFileSync,
+  mkdirSync,
+  cpSync,
+  writeFileSync,
+} from "node:fs";
 import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { createLogger } from "@easyclaw/logger";
 import type {
   GatewayLaunchOptions,
@@ -234,6 +241,40 @@ export class GatewayLauncher extends EventEmitter<GatewayEvents> {
       env.NODE_COMPILE_CACHE = userCacheDir;
     }
 
+    // ── Startup profiler preload ──
+    // Inject a CJS preload script that logs timing milestones to stderr.
+    // The script is written to stateDir so it works in packaged apps too.
+    if (this.options.stateDir) {
+      const preloadPath = join(this.options.stateDir, "startup-timer.cjs");
+      try {
+        const thisDir = fileURLToPath(new URL(".", import.meta.url));
+        const srcPreload = join(thisDir, "startup-timer.cjs");
+        // In dev: src/startup-timer.cjs exists next to the TS source
+        // In prod: startup-timer.cjs is copied to dist/ by tsdown
+        if (existsSync(srcPreload)) {
+          writeFileSync(preloadPath, readFileSync(srcPreload));
+        } else {
+          // Fallback: write a minimal inline version
+          writeFileSync(
+            preloadPath,
+            `"use strict";
+const t0=performance.now();
+const Module=require("module"),origLoad=Module._load;
+Module._load=function(r,p,m){const s=performance.now();const res=origLoad.call(this,r,p,m);const d=performance.now()-s;if(d>50)process.stderr.write("[startup-timer] +"+((performance.now()-t0)|0)+"ms require(\\""+r+"\\") took "+(d|0)+"ms\\n");return res};
+process.stderr.write("[startup-timer] +0ms preload executing\\n");
+setImmediate(()=>process.stderr.write("[startup-timer] +"+(performance.now()-t0|0)+"ms event loop started\\n"));
+const ow=process.stdout.write;process.stdout.write=function(c,...a){if(String(c).includes("listening on"))process.stderr.write("[startup-timer] +"+(performance.now()-t0|0)+"ms gateway listening\\n");return ow.call(this,c,...a)};
+`,
+          );
+        }
+        const existingNodeOpts = env.NODE_OPTIONS || "";
+        env.NODE_OPTIONS = `--require ${JSON.stringify(preloadPath)} ${existingNodeOpts}`.trim();
+      } catch {
+        // Non-critical — skip profiling if we can't write the preload
+      }
+    }
+
+    const spawnTs = performance.now();
     const child = spawn(this.options.nodeBin, [this.options.entryPath, "gateway"], {
       env,
       cwd: this.options.stateDir || undefined,
@@ -273,6 +314,8 @@ export class GatewayLauncher extends EventEmitter<GatewayEvents> {
         log.info(`[gateway stdout] ${line}`);
         if (!readyEmitted && line.includes("listening on")) {
           readyEmitted = true;
+          const elapsed = ((performance.now() - spawnTs) / 1000).toFixed(1);
+          log.info(`Gateway ready in ${elapsed}s (spawn → listening)`);
           this.emit("ready");
         }
       }

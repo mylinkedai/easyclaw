@@ -33,7 +33,9 @@ export function MobileBindingModal({ isOpen, onClose, onBindingSuccess }: Mobile
             setPairingCode(res.code || null);
 
             if (res.code) {
-                const qrContent = res.qrUrl || res.code;
+                // MOCK: hardcode LAN URL for testing. Remove when CHAT_PWA_URL is set on backend.
+                const MOCK_PWA_URL = "http://192.168.48.78:8081";
+                const qrContent = res.qrUrl || `${MOCK_PWA_URL}?code=${res.code}`;
                 const qrData = await QRCode.toDataURL(qrContent, {
                     margin: 2,
                     width: 250,
@@ -125,12 +127,6 @@ export function MobileBindingModal({ isOpen, onClose, onBindingSuccess }: Mobile
                                 </div>
                             )}
 
-                            {pairingCode && (
-                                <div className="mobile-code-section">
-                                    <p>{t("mobile.manualCodeHint")}</p>
-                                    <div className="mobile-pairing-code">{pairingCode}</div>
-                                </div>
-                            )}
                         </div>
                     )}
                 </div>

@@ -682,8 +682,7 @@ export default {
     connectedDesc: "Your mobile device ({{device}}) is successfully connected.",
     disconnect: "Disconnect Device",
     waitingForConnection: "Scan to Connect",
-    scanHint: "Open ChatClaw on your phone and scan the QR code to connect instantly.",
-    manualCodeHint: "Or enter this code manually:",
+    scanHint: "Scan the QR code with your phone camera to connect.",
     existingPairings: "{{count}} device(s) already paired."
   },
   permissions: {

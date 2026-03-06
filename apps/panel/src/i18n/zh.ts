@@ -682,8 +682,7 @@ export default {
     connectedDesc: "您的移动设备 ({{device}}) 已成功连接。",
     disconnect: "断开连接",
     waitingForConnection: "扫描二维码连接",
-    scanHint: "在手机上打开爪聊扫描该二维码即可快速连接。",
-    manualCodeHint: "或手动输入以下配对码：",
+    scanHint: "用手机摄像头扫描二维码即可连接。",
     existingPairings: "已有 {{count}} 台设备配对。"
   },
   permissions: {

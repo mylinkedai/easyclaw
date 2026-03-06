@@ -3125,22 +3125,6 @@ tbody td {
   display: block;
 }
 
-.mobile-code-section {
-  margin-top: 2rem;
-}
-
-.mobile-pairing-code {
-  font-size: 2rem;
-  letter-spacing: 4px;
-  font-weight: bold;
-  font-family: monospace;
-  background: var(--color-bg-alt);
-  padding: 1rem 2rem;
-  border-radius: 8px;
-  display: inline-block;
-  margin-top: 0.5rem;
-}
-
 .select-min-w-200 {
   min-width: 200px;
 }

@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { deleteChannelAccount, unbindWeComAccount, type ChannelAccountSnapshot } from "../api/index.js";
 import { pollGatewayReady } from "../lib/poll-gateway.js";
@@ -45,6 +45,12 @@ export function ChannelsPage() {
     () => snapshot ? buildAccountsList(snapshot, wecomStatus, t) : [],
     [snapshot, wecomStatus, t],
   );
+
+  const handleMobileModalClose = useCallback(() => setMobileModalOpen(false), []);
+  const handleMobileBindingSuccess = useCallback(() => {
+    loadChannelStatus();
+    setMobileModalOpen(false);
+  }, []);
 
   function handleAddAccountFromDropdown() {
     if (!selectedDropdownChannel) return;
@@ -332,11 +338,8 @@ export function ChannelsPage() {
       {/* Mobile Binding Modal */}
       <MobileBindingModal
         isOpen={mobileModalOpen}
-        onClose={() => setMobileModalOpen(false)}
-        onBindingSuccess={() => {
-          loadChannelStatus();
-          setMobileModalOpen(false);
-        }}
+        onClose={handleMobileModalClose}
+        onBindingSuccess={handleMobileBindingSuccess}
       />
 
       {/* Delete Confirm Dialog */}

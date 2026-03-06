@@ -5,6 +5,7 @@ import {
     generateMobilePairingCode,
     getMobilePairingStatus,
 } from "../api/mobile-chat.js";
+import { fetchPrivacyMode } from "../api/settings.js";
 import { Modal } from "./Modal.js";
 
 interface MobileBindingModalProps {
@@ -21,9 +22,30 @@ export function MobileBindingModal({ isOpen, onClose, onBindingSuccess }: Mobile
     const [pairingCode, setPairingCode] = useState<string | null>(null);
     const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
     const [existingCount, setExistingCount] = useState(0);
+    const [privacyMode, setPrivacyMode] = useState(false);
+    const [qrRevealed, setQrRevealed] = useState(false);
 
     const pollIntervalRef = useRef<number | null>(null);
     const baseCountRef = useRef(0);
+    // Stable ref for onBindingSuccess to avoid re-triggering useEffect
+    const onBindingSuccessRef = useRef(onBindingSuccess);
+    onBindingSuccessRef.current = onBindingSuccess;
+
+    // Load privacy mode setting and listen for changes
+    useEffect(() => {
+        fetchPrivacyMode().then(setPrivacyMode).catch(() => {});
+
+        function onPrivacyChanged() {
+            fetchPrivacyMode().then(setPrivacyMode).catch(() => {});
+        }
+        window.addEventListener("privacy-settings-changed", onPrivacyChanged);
+        return () => window.removeEventListener("privacy-settings-changed", onPrivacyChanged);
+    }, []);
+
+    // Reset revealed state when modal opens
+    useEffect(() => {
+        if (isOpen) setQrRevealed(false);
+    }, [isOpen]);
 
     const generateCode = useCallback(async () => {
         try {
@@ -33,9 +55,7 @@ export function MobileBindingModal({ isOpen, onClose, onBindingSuccess }: Mobile
             setPairingCode(res.code || null);
 
             if (res.code) {
-                // MOCK: hardcode LAN URL for testing. Remove when CHAT_PWA_URL is set on backend.
-                const MOCK_PWA_URL = "http://192.168.48.78:8081";
-                const qrContent = res.qrUrl || `${MOCK_PWA_URL}?code=${res.code}`;
+                const qrContent = res.qrUrl || `https://chat.zhuazhuaai.cn?code=${res.code}`;
                 const qrData = await QRCode.toDataURL(qrContent, {
                     margin: 2,
                     width: 250,
@@ -52,19 +72,7 @@ export function MobileBindingModal({ isOpen, onClose, onBindingSuccess }: Mobile
         }
     }, [t]);
 
-    const loadInitialData = useCallback(async () => {
-        if (!isOpen) return;
-        setLoading(true);
-        try {
-            const res = await getMobilePairingStatus();
-            const count = res.pairings?.length ?? 0;
-            setExistingCount(count);
-            baseCountRef.current = count;
-        } catch { /* ignore */ }
-        await generateCode();
-        setLoading(false);
-    }, [isOpen, generateCode]);
-
+    // Main effect: generate code once and start polling when modal opens
     useEffect(() => {
         if (!isOpen) {
             if (pollIntervalRef.current) {
@@ -74,7 +82,20 @@ export function MobileBindingModal({ isOpen, onClose, onBindingSuccess }: Mobile
             return;
         }
 
-        loadInitialData();
+        let cancelled = false;
+
+        (async () => {
+            // Load initial pairing count and generate code (once per modal open)
+            try {
+                const res = await getMobilePairingStatus();
+                const count = res.pairings?.length ?? 0;
+                if (!cancelled) {
+                    setExistingCount(count);
+                    baseCountRef.current = count;
+                }
+            } catch { /* ignore */ }
+            if (!cancelled) await generateCode();
+        })();
 
         // Poll: detect when a NEW pairing appears (count increases)
         pollIntervalRef.current = window.setInterval(async () => {
@@ -85,17 +106,21 @@ export function MobileBindingModal({ isOpen, onClose, onBindingSuccess }: Mobile
                 if (count > baseCountRef.current && pollIntervalRef.current) {
                     clearInterval(pollIntervalRef.current);
                     pollIntervalRef.current = null;
-                    onBindingSuccess();
+                    onBindingSuccessRef.current();
                 }
             } catch { /* ignore */ }
         }, 3000);
 
         return () => {
+            cancelled = true;
             if (pollIntervalRef.current) {
                 clearInterval(pollIntervalRef.current);
+                pollIntervalRef.current = null;
             }
         };
-    }, [isOpen, loadInitialData, onBindingSuccess]);
+    }, [isOpen, generateCode]);
+
+    const showBlur = privacyMode && !qrRevealed;
 
     return (
         <Modal
@@ -122,8 +147,16 @@ export function MobileBindingModal({ isOpen, onClose, onBindingSuccess }: Mobile
                             <p className="mobile-scan-hint">{t("mobile.scanHint")}</p>
 
                             {qrDataUrl && (
-                                <div className="mobile-qr-container">
+                                <div
+                                    className={`mobile-qr-container${showBlur ? " qr-privacy-blur" : ""}`}
+                                    onClick={showBlur ? () => setQrRevealed(true) : undefined}
+                                >
                                     <img src={qrDataUrl} alt="Pairing QR Code" width={250} height={250} />
+                                    {showBlur && (
+                                        <div className="qr-privacy-overlay">
+                                            {t("settings.app.clickToReveal")}
+                                        </div>
+                                    )}
                                 </div>
                             )}
 

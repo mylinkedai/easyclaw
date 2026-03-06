@@ -3125,6 +3125,27 @@ tbody td {
   display: block;
 }
 
+.qr-privacy-blur {
+  position: relative;
+  cursor: pointer;
+}
+
+.qr-privacy-blur img {
+  filter: blur(16px);
+  transition: filter 0.3s;
+}
+
+.qr-privacy-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-secondary);
+  font-size: 14px;
+  font-weight: 500;
+}
+
 .select-min-w-200 {
   min-width: 200px;
 }

@@ -92,7 +92,7 @@ export class MobileManager {
             const data = json.data.generatePairingCode;
             this.activeCode = {
                 code: data.code,
-                expiresAt: Date.now() + 5 * 60 * 1000, // 5 minutes
+                expiresAt: Date.now() + 60 * 1000, // 60 seconds
             };
 
             return { code: data.code, ...(data.qrUrl ? { qrUrl: data.qrUrl } : {}) };
@@ -163,14 +163,21 @@ export class MobileManager {
         this.waitAbort = ac;
         this.waitingForCode = code;
 
+        // Retry long-poll requests until the pairing code expires (60s).
+        // Each server-side long-poll times out after 30s, so we get ~2 attempts.
+        const deadline = Date.now() + 60_000;
+
         try {
-            const response = await fetch(`${this.controlPlaneUrl}/graphql`, {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                    query: `query WaitForPairing($code: String!) {
+            while (Date.now() < deadline) {
+                if (ac.signal.aborted) return { paired: false };
+
+                const response = await fetch(`${this.controlPlaneUrl}/graphql`, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({
+                        query: `query WaitForPairing($code: String!) {
   waitForPairing(code: $code) {
     paired
     pairingId
@@ -181,37 +188,45 @@ export class MobileManager {
     reason
   }
 }`,
-                    variables: { code },
-                }),
-                signal: ac.signal,
-            });
-            if (!response.ok) return { paired: false };
+                        variables: { code },
+                    }),
+                    signal: ac.signal,
+                });
+                if (!response.ok) return { paired: false };
 
-            const json = await response.json() as {
-                data?: {
-                    waitForPairing: {
-                        paired: boolean;
-                        pairingId?: string;
-                        accessToken?: string;
-                        relayUrl?: string;
-                        desktopDeviceId?: string;
-                        mobileDeviceId?: string;
-                        reason?: string;
+                const json = await response.json() as {
+                    data?: {
+                        waitForPairing: {
+                            paired: boolean;
+                            pairingId?: string;
+                            accessToken?: string;
+                            relayUrl?: string;
+                            desktopDeviceId?: string;
+                            mobileDeviceId?: string;
+                            reason?: string;
+                        };
                     };
+                    errors?: Array<{ message: string }>;
                 };
-                errors?: Array<{ message: string }>;
-            };
 
-            if (json.errors?.length) {
-                log.error("GraphQL error waiting for pairing:", json.errors[0].message);
-                return { paired: false };
+                if (json.errors?.length) {
+                    log.error("GraphQL error waiting for pairing:", json.errors[0].message);
+                    return { paired: false };
+                }
+
+                if (!json.data) {
+                    return { paired: false };
+                }
+
+                const result = json.data.waitForPairing;
+                if (result.paired) {
+                    return result;
+                }
+
+                // Server returned timeout — retry if code hasn't expired yet
             }
 
-            if (!json.data) {
-                return { paired: false };
-            }
-
-            return json.data.waitForPairing;
+            return { paired: false };
         } catch (error: any) {
             if (error?.name === "AbortError") {
                 log.info("Pairing wait aborted for code:", code);
